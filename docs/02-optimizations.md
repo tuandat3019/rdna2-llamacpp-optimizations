@@ -28,40 +28,7 @@ Measurement rules used for every number below:
 | E13 | Noise floor over time | ±0.2% same prompt | stable |
 | E14/E15 | Per-op profiler | decode @128K: **FA 62.5%, MMQ 25%, rest 12.5%** | FA confirmed as #1 |
 
-## 2. Flash-attention: custom kernel (E16/E17) — the long road
-
-Motivation: stock llama.cpp converts the whole q4_0 KV cache to F16 **on every decode step**
-when `n_tokens > 2` (TILE path), estimated ~14 GB/step of traffic at 128K (~20% of token time).
-
-| ID | What | Before → After | Verdict |
-|---|---|---|---|
-| E16-MB | Standalone microbench for the FA shape (n=1, 24 q-heads, 4 kv-heads, D=256, q4_0 KV, kv=111112) | layout bug found (q4_0 row = 144 B = 8×18 B); correct baseline 8.17 ms | infrastructure kept |
-| E16-OPT | Micro-optimization campaign (nibble-window u64, LDS transpose, BK=4, …) | 8.17 → **2.90 ms (−64%)** (6600) / 4.10 → **1.51 ms (−63%)** (6800) | kernel itself fast |
-| E16-CHK | The test harness was broken (bad f16 `memcpy`, NaN skipped by `diff > max`) — all earlier "PASS" meaningless | after fix: everything FAILED | **lesson: verify your checker** |
-| E16-SCALE | Root cause #1: kernel used block-0 scale for all 256 elements (q4_0 has 8 scales/row) | fixed | kept |
-| E16-OPT8R | `__builtin_amdgcn_readlane` needs a uniform lane-id; VGPR id → `v_readfirstlane` | −5% but FAIL 0.28 | **dropped** |
-| E16-FILT | Production A/B 32K/64K | custom = 88.9% / 83.4% of stock | custom still slower |
-| E16-A1/B1/B2 | Custom enabled for all ntok | 18.79 → **6.55 t/s (2.9× slower, reproduced)** | regression real |
-| E17-BREAK | Cost breakdown | staging 36%, mask 0.45 ms, reduce 0.45 ms, exp 0.39 ms, V 0.38 ms | staging = target |
-| E17-HOIST | Mask prefetch (4 half) | 3.63 → 3.32 ms (−9%) | kept |
-| E17-FASTEXP | `expf` → `__expf` | 3.32 → 3.02 ms (−9%) | kept |
-| E17-DPPFUSE | Fuse the 2-instruction reduce into 1 (DPP modifier on `v_add_f32`, from ISA dumps) | −12.9%; with SKIPAO −15.3%, bit-exact | **kept** |
-| E17-VAL | Re-validated default | 2.90 → **2.1349 ms** (−26%) | kept |
-| E17-GPUCHK | "Slow state" explained: **GPU shared** (router child process + Sunshine codec engine + dwm) | prefill 256 → **310 t/s (+21%)** on clean GPU | protocol kept |
-| E17-32K/128K clean | Custom vs stock on clean GPU | custom = 95.25% @32K, **90.26% @128K** of stock | custom loses at ntok≥3 |
-| E17-ROOT | Root cause: stock TILE processes **256 KV columns/loop** with quantized `vec_dot` (4 MAC/instr); custom = 1 row/loop + scalar dequant | architectural, cannot be closed by micro-opts | conclusion |
-| **E17-FINAL** | **Hybrid: custom for ntok ≤ 2, stock TILE/VEC for ntok ≥ 3** | **+2.05% @32K, +0.89% @128K** | **kept (hybrid)** |
-| E17-PORT | Porting our DPP-reduce + `__expf` into stock | +0.09% = no-op | reverted |
-| E17-VEC8 | Extend VEC to ntok ≤ 8 | 84.9% of stock | reverted |
-| E17-GRAPHS | Graphs ON with custom | −1% | not kept |
-
-**Takeaway:** the custom kernel wins only for ntok ≤ 2 (1.72× faster than stock VEC at ntok=2)
-and loses for wider batches by architecture. The correct fix for the wide-batch case is
-**not** a custom kernel — it is teaching the stock TILE kernel to read the quantized cache
-natively. That is exactly optimization #4 below (V4), which delivered +9.2% @128K —
-an order of magnitude more than the custom kernel's +0.89%.
-
-## 3. Speculative decoding: MTP + ngram-mod (the biggest lever)
+## 2. Speculative decoding: MTP + ngram-mod (the biggest lever)
 
 The model has a built-in MTP head (blk.64). `--spec-type draft-mtp,ngram-mod` combines
 MTP drafts with n-gram lookup drafts.
@@ -103,9 +70,19 @@ round at almost no MTP compute cost. Beyond ~24, draft quality collapses (accept
 .86 → .70) and the extra verify work is wasted.
 
 **Final champion (dual, 128K):** `draft-mtp,ngram-mod` N3 pmin .50 ngram match 45 n-max 24,
-band40, layer 1.0,4.0 → **29.26–29.30 t/s**, acceptance .86.
+band2048, layer 1.0,4.0 → **29.26–29.70 t/s**, acceptance .86–.89.
 
-## 4. V4: native quantized KV in the FA tile kernel (port of stew675 block 15)
+**Single card is different:** on a single RX 6800 the depth optimum moves *up* again —
+no split overhead, so deeper drafts pay off:
+
+| Single-card 8K, ngram 24 | N3 | N6 | **N12** | N32 |
+|---|---|---|---|---|
+| TG | 98.1 | 95.6 | **117.1** | PP-fail (spill) |
+
+**ubatch sweep @128K (dual):** 256 → 17.9 t/s (−29%), **512 → 29.3 (best)**, 640 → 19.2
+(−34%), 1024 → prefill collapse. 512 is the exact sweet spot.
+
+## 3. V4: native quantized KV in the FA tile kernel (port of stew675 block 15)
 
 | ID | What | Result |
 |---|---|---|
@@ -118,14 +95,14 @@ band40, layer 1.0,4.0 → **29.26–29.30 t/s**, acceptance .86.
 Also from the same block: the prefill path keeps the staged F16 copy (native prefill was
 promising for PP — 258→201 t/s observed once — but crashed in this fork; not shipped).
 
-## 5. Graph fusions
+## 4. Graph fusions
 
 | ID | What | Result |
 |---|---|---|
 | E57 | ADD + RMS_NORM + MUL fused into one kernel (port of jstamagal R7) | TG +0.4%, **PP +7.7%** (394.8 vs ~366), gate `KURAI_NO_NORM_FUSION=1` to disable |
 | E29 | Skip HIP graphs for multi-token prefill, keep per-width decode graphs (stew675 block 11) | neutral on this setup @128K; kept |
 
-## 6. GPU split & VRAM
+## 5. GPU split & VRAM
 
 | ID | What | Result |
 |---|---|---|
@@ -137,9 +114,12 @@ promising for PP — 258→201 t/s observed once — but crashed in this fork; n
 | E55 | 128K bottleneck = 6600 overflow (needs 4.9 GB, ~1.4 GB free) → TG 27.4 | use 1,4 |
 | E60 | split 1,9 @128K: 6800 spills 3 GB → PP collapses 175 → 59.8 t/s, killed | 1,9 rejected |
 | E66e | ubatch 256 @128K: spill 2553 → 1500 MB but **TG 17.9 (−29%)** | spill is not the bottleneck; ub256 rejected |
+| E79 | ubatch 640/1024 @128K | 640: TG 19.2 (−34%); 1024: prefill collapse → **ub 512 is the exact optimum** |
+| E70b | `--load-mode mmap+mlock` (model pinned in RAM) | **29.70 t/s — highest raw number**, plus pageout protection; candidate for production |
+| E70b | `--swa-checkpoints` off | 29.45 — tie; keep checkpoints for production (they help real long sessions with context trimming) |
 | E66e | band2048 (native prefill, no staging scratch): PP ~258→201 t/s observed, −472 MB, but crashed at 83% prefill in this fork | not shipped |
 
-## 7. Everything else that was tried
+## 6. Everything else that was tried
 
 | ID | What | Result | Verdict |
 |---|---|---|---|

@@ -6,19 +6,39 @@ no graphs (HIP graphs off for 128K runs), MTP+ngram spec unless noted.
 
 ## Single RX 6800 (16 GB) — the publishable configuration
 
-| Context | Config | PP | TG (warm) | Acceptance | VRAM peak (ded/shared) |
-|---|---|---|---|---|---|
-| 8K | N3, pmin .50, ngram n-max 24 | **371.7** | **97.97** | 1.0 | 14,457 / 280 MB |
-| 8K | N6 | | | | |
-| 8K | N12 | | | | |
-| 8K | N32 | PP-fail (115 t/s) | — | — | 16,331 / 2,708 MB (spill) |
-| 64K | N3, pmin .50, ngram n-max 24 | **290.0** | **32.85** | .74 | 15,967 / 392 MB |
-| 128K | N3 | | | | |
+Final config: band2048 (native KV everywhere), custom FA kernel OFF, ngram n-max 24, pmin .50, ub 512.
 
-(E78 completes the 8K-N6 / 8K-N12 / 128K-N3 rows.)
+| Context | Draft N | PP | TG (warm) | Acceptance | VRAM peak (ded / shared) | Spill |
+|---|---|---|---|---|---|---|
+| 8K | N12 | 370.8 | **117.07** | 1.0 | 15,814 / 280 MB | minimal |
+| 8K | N3 | 372.1 | 98.12 | 1.0 | 14,453 / 280 MB | minimal |
+| 8K | N6 | 373.0 | 95.57 | .98 | 14,907 / 280 MB | minimal |
+| 8K | N32 | — | PP-fail (115 t/s) | — | 16,331 / 2,708 MB | heavy |
+| 64K | N3 | 283.6 | **31.38** | .77 | 15,748 / 392 MB | **light (~0.4 GB)** |
+| 128K | N3 | 188.1 | **17.20** | .81 | 14,986 / **2,824 MB** | **heavy (~2.8 GB)** |
 
-Historical single-card references (previous model, Coletti 27B IQ4_XS):
-8K **87.96** (MTP n5/.82 + ngram n9/m45, ub1024), 128K **25.91** (older build).
+### Why 64K and 128K spill — and why 128K collapses on a single card
+
+The RX 6800 has 16.4 GB. The budget at each context:
+
+| Item | 8K | 64K | 128K |
+|---|---|---|---|
+| Weights (UD-IQ4_XS) | 14.25 GB | 14.25 GB | 14.25 GB |
+| KV cache q4_0 (18.4 KB/token) | 0.15 GB | 1.18 GB | 2.36 GB |
+| Compute buffers + workspace | ~1.5 GB | ~1.6 GB | ~1.8 GB |
+| **Total** | ~15.9 GB | **~17.0 GB** | **~18.4 GB** |
+| **Over 16.4 GB?** | no | **+0.6 GB → spills to host RAM** | **+2.0 GB → heavy spill** |
+
+The overflow does not fail — the driver places those allocations in host RAM
+(GPU "shared" memory), and the model keeps working. But every decode token must read the
+spilled KV/weights over PCIe: at 64K the penalty is small (31.4 t/s vs 8K's 117), at 128K
+it is severe (**17.2 t/s**, less than half of what the same model does at 64K). Note the
+spill shown is *peak*; part of the "shared" usage is by design (the host-side KV mirror
+from `--cache-ram`), but at 128K the genuinely spilled portion dominates.
+
+**Practical guidance:** on a single 16 GB card, 64K is the comfortable ceiling (light
+spill, 31 t/s); 128K runs but is spill-bound (17 t/s). Dual-card splits the weights and
+KV across both GPUs and reaches 29.7 t/s at 128K.
 
 ## Dual RX 6800 + RX 6600 (layer-split 1.0,4.0)
 
