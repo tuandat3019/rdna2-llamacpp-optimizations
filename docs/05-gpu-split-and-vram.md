@@ -39,10 +39,17 @@ split choice is dominated by whether the 6800 overflows.
 
 ## Context headroom
 
-Per +16K context: **+295 MB** of q4_0 KV. Current 128K champion configuration leaves the
-6600 with ~2.4 GB of unused headroom, so a re-split (moving a few more layers to the
-6600, e.g. 1.2,3.8) should push the practical ceiling toward ~192K at some TG cost.
-Single-card 6800 runs 64K with only ~390 MB of spill and 128K with ~1.5 GB (estimated).
+Per +16K context: **+295 MB** of q4_0 KV. Measured on the Swift model at split 1.0,4.0:
+128K → 15,288 MB peak on the 6800 (headroom 1,080 MB); **144K → 15,716 (652 MB, clean)**;
+160K → 16,144 (224 MB → spills, 18.2 t/s). A validated formula (within 1 MB):
+
+```
+ded_6800 ≈ 15,170 + (ctx − 128K)/16K × 428 MB     (−703 MB with split 1.2,3.8)
+```
+
+The 6600's spare headroom buys the re-split: at 180K the 1.2,3.8 split keeps the 6800 at
+16,129 MB (239 MB headroom, light spill) and still runs 20.9 t/s — while 1.0,4.0 would
+overflow harder at that depth. Real spill begins below ~350 MB of headroom.
 
 ## Single vs dual card
 

@@ -22,6 +22,14 @@ using a patched llama.cpp.
 | 8K  | **117.07 t/s** (PP 370.8, N12) | 107.10 t/s (2-card, N32) |
 | 64K | **31.38 t/s** (PP 283.6) | — |
 | 128K | 17.20 t/s (spill ~2.8 GB — single card runs out) | **29.70 t/s** (PP ~185) |
+| 144K | — | **32.30 t/s** (PP 163.3) — with **Vision** (mmproj-BF16) on the 6600 |
+| 160K / 180K | — | 18.2 t/s (spill) / 20.9 t/s (re-split 1.2,3.8, light spill) |
+
+**Vision:** the `mmproj-BF16` tower (888 MB) offloads to the **RX 6600** (+779 MB dedicated),
+leaving the 6800 budget untouched — 144K + Vision is spill-free (6800 headroom 771 MB) and
+text-only TG is unchanged. VRAM formula (validated within 1 MB):
+`ded_6800 ≈ 15,170 + (ctx−128K)/16K × 428 MB` (−703 MB with split 1.2,3.8); real spill
+begins below ~350 MB of headroom.
 
 Baseline before this optimization series (same hardware, stock-ish build, Coletti 27B IQ4_XS):
 **18.9 t/s @128K** → after: **29.7 t/s @128K** (dual) — a **+57% end-to-end gain**,

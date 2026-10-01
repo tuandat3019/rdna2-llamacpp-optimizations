@@ -42,6 +42,37 @@ KV across both GPUs and reaches 29.7 t/s at 128K.
 
 ## Dual RX 6800 + RX 6600 (layer-split 1.0,4.0)
 
+### 2026-10-02 update — 144K champion + Vision
+
+| Context | Split | PP | TG (median) | rep1 / rep2 TG | Acceptance | VRAM peak 6800 | Headroom | Spill |
+|---|---|---|---|---|---|---|---|---|
+| **144K** | 1.0,4.0 | **163.3** | **32.30** | 19.34 / 32.30 | .74 / .93 | 15,716 | 652 MB | none |
+| **144K + Vision** | 1.0,4.0 | 160.5 | 30.93 | 18.86 / 30.93 | .74 / .93 | 15,716 | 652 MB | none |
+| 128K | 1.0,4.0 | 185.4 | 29.30 | 19.69 / 29.30 | .67 | 15,288 | 1,080 MB | none |
+| 128K + MLOCK | 1.0,4.0 | 185.4 | **29.70** | 18.18 / 29.70 | .65 | — | — | none |
+| 160K | 1.0,4.0 | 155.5 | 18.18 | 18.13 / 18.18 | .76 | 16,144 | 224 MB | **yes — spill-bound** |
+| 180K | **1.2,3.8** | 136.1 | 20.93 | 15.79 / 20.93 | .73 | 16,129 | 239 MB | light |
+
+Notes:
+- 144K (32.3 t/s) > 128K (29.3) on the same prompt family because the warm-rep acceptance
+  is higher (.93 vs .67) — spec acceptance, not raw kernel speed, dominates measured TG.
+- Vision (mmproj on the 6600) costs ~1.7% PP / ~4% TG in the text-only bench — inside the
+  machine's ±5-8% noise band; the 6800 budget is untouched (same 15,716 MB peak).
+- rep1 is measured right after a ~14-minute prefill (hot GPU, cold spec state); rep2 is the
+  steady-state number.
+- 160K at 1.0,4.0 genuinely spills (224 MB headroom < ~350 MB) and drops to 18.2 t/s.
+  Re-splitting to 1.2,3.8 recovers it: 180K runs at 20.9 t/s with light spill.
+- VRAM formula (validated within 1 MB): `ded_6800 ≈ 15,170 + (ctx−128K)/16K × 428 MB`,
+  −703 MB with split 1.2,3.8. Real spill starts below ~350 MB of headroom.
+
+### Vision (mmproj-BF16, 888 MB) at 144K
+
+The vision tower offloads to the **RX 6600** (+779 MB dedicated), leaving the 6800 budget
+untouched: 144K + Vision loads at 15,597 MB on the 6800 (headroom 771 MB), no spill, and
+the text-only benchmark shows no measurable TG change (the tower idles for text input).
+An image smoke test (text + shapes) exercises the actual vision path.
+
+
 | Context | Config | PP | TG (warm) | Acceptance | Notes |
 |---|---|---|---|---|---|
 | 8K | N9 .82 m45 | 303 | 74.83 | .854 | |
