@@ -14,7 +14,13 @@ Final config: band2048 (native KV everywhere), custom FA kernel OFF, ngram n-max
 | 8K | N3 | 372.1 | 98.12 | 1.0 | 14,453 / 280 MB | minimal |
 | 8K | N6 | 373.0 | 95.57 | .98 | 14,907 / 280 MB | minimal |
 | 8K | N32 | — | PP-fail (115 t/s) | — | 16,331 / 2,708 MB | heavy |
-| 64K | N3 | 283.6 | **31.38** | .77 | 15,748 / 392 MB | **light (~0.4 GB)** |
+| 64K | N3 + NG40 | 283.7 | **56.00** | .95 | 15,748 / 452 MB peak | **light (~0.4 GB)** |
+| 64K | N3 + NG32 | 283.6 | 45.79 | .90 | ~15,7xx | light |
+| 64K | N3 + NG24 (old default) | 283.6 | 31.38–31.49 | .77 | 15,748 / 392 MB | **light (~0.4 GB)** |
+| 64K | N3 + NG44 / NG48 | 283.8 / 283.7 | 39.79 / 38.77 | .88 / .85 | ~15,6–15,7xx | light (past the NG peak) |
+| 64K | N2 / N4 / N5 (+NG32) | ~283.8 | 44.48 / 39.33 / 32.75 | .88 / .67 / .72 | — | N6 spill-skips (no JSON) |
+| 64K | N9 / N12 | ~283 | 18.34 / 24.01 | .52 / .65 | — | deep draft collapses (verify cost) |
+| 64K | N3 + NG24, ub256 | 270.9 | 40.22 | .69 | 15,564 / 338 MB peak | smaller ub helps shallow ngram only |
 | 128K | N3 | 188.1 | **17.20** | .81 | 14,986 / **2,824 MB** | **heavy (~2.8 GB)** |
 
 ### Why 64K and 128K spill — and why 128K collapses on a single card
@@ -37,8 +43,10 @@ spill shown is *peak*; part of the "shared" usage is by design (the host-side KV
 from `--cache-ram`), but at 128K the genuinely spilled portion dominates.
 
 **Practical guidance:** on a single 16 GB card, 64K is the comfortable ceiling (light
-spill, 31 t/s); 128K runs but is spill-bound (17 t/s). Dual-card splits the weights and
-KV across both GPUs and reaches 29.7 t/s at 128K.
+spill, **56.0 t/s** with N3/NG40 spec tuning, acc .95, headroom 739 MB); 128K runs but is
+spill-bound (17 t/s). Dual-card splits the weights and KV across both GPUs and reaches
+29.7 t/s at 128K. At 64K single and dual are tied (~56 vs ~46–51): the 6600's copy
+overhead cancels its VRAM relief, and dual 64K runs are less stable run-to-run than single.
 
 ## Dual RX 6800 + RX 6600 (layer-split 1.0,4.0)
 
@@ -64,6 +72,24 @@ Notes:
   Re-splitting to 1.2,3.8 recovers it: 180K runs at 20.9 t/s with light spill.
 - VRAM formula (validated within 1 MB): `ded_6800 ≈ 15,170 + (ctx−128K)/16K × 428 MB`,
   −703 MB with split 1.2,3.8. Real spill starts below ~350 MB of headroom.
+
+### Dual @64K (2026-10-03 campaign, same Swift model, UNIQUE-64K ~53K tokens)
+
+| Split | N / NG | PP | TG (warm) | Acceptance | 6800 peak / headroom |
+|---|---|---|---|---|---|
+| 1.0,4.0 | N13 / NG24 | ~239 | **50.61** | .84 | 15,427 / 1,061 MB — **but reruns at 33.15** (unstable) |
+| 2,9 | N12 / NG24 | ~244 | **45.66** | .76 | ~15,5xx — stable best dual |
+| 2,9 | N12 / NG9 | 244.1 | 35.50 | .83 | ~15,6xx |
+| 2,9 | N12 / NG12–32 | ~244 | 24.0–24.8 | .50–.60 | NG24 is the peak on this split |
+| 2,9 | N16 / N20 / N24 | ~243 | 26–29 | .54–.60 | peak 16,072 MB (headroom ~300 MB → spill-bound collapse) |
+| 1.2,3.8 | N12 / NG24 | — | 39.59 | .82 | — |
+| 1,8 / 1,7 / 2,7 | N12 / NG24 | 236–257 | 33.2 / 28.7 / 28.3 | .62 / .59 / .65 | 1,8 peaks at 16,098 (270 MB headroom → spill-affected) |
+| 1,9 / 1,25 | N12 / NG24 | — | 12.5 / 24.2 | .58 / .65 | too tight — collapses |
+| 1.0,4.0 | N3 / N6 / N9 / N12 | — | 26.0 / 24.0 / 33.5 / 34.8 | .72 / .58 / .67 / .65 | — |
+
+Takeaway: pushing more layers onto the 6800 helps only up to 2,9 — tighter splits
+spill the 6800 (peak >16 GB) and TG collapses. Dual N optimum at 64K is N12–13;
+deeper drafts (N16+) collapse like at 128K.
 
 ### Vision (mmproj-BF16, 888 MB) at 144K
 

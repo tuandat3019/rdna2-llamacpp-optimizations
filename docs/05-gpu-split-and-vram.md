@@ -56,10 +56,11 @@ overflow harder at that depth. Real spill begins below ~350 MB of headroom.
 | | Single 6800 | Dual (1.0,4.0) |
 |---|---|---|
 | 8K | **97.97 t/s** (PP 371.7) | 107.10 t/s (PP ~300) |
-| 64K | **32.85 t/s** (PP 290) | — |
+| 64K | **56.00 t/s** (PP 283.7, N3/NG40, headroom 739 MB) | 50.61 t/s (N13 — unstable) / **45.66** stable @2,9/N12 |
 | 128K | ~26 t/s (previous model) | **29.26 t/s** |
 
 Single card wins at 8K by ~60% for the same spec config (no split overhead, no
-cross-GPU copies); dual card wins where VRAM is needed (128K) and for absolute 8K
-throughput with deeper drafts. For publication and reproducibility, the single-card
+cross-GPU copies); at 64K single still wins (~56 vs ~46 stable dual) because the
+6600's copy overhead cancels its VRAM relief — dual only wins where the single card
+genuinely spills (128K+). For publication and reproducibility, the single-card
 numbers are the cleanest.

@@ -20,7 +20,7 @@ using a patched llama.cpp.
 | Context | Single RX 6800 (16 GB) | Dual RX 6800 + RX 6600 (16+8 GB, layer-split) |
 |---|---|---|
 | 8K  | **117.07 t/s** (PP 370.8, N12) | 107.10 t/s (2-card, N32) |
-| 64K | **31.38 t/s** (PP 283.6) | — |
+| 64K | **56.00 t/s** (PP 283.7, N3/NG40, acc .95, headroom 739 MB) | **50.61 t/s** (1.0,4.0/N13, acc .84 — unstable on rerun; stable best **45.66** @2,9/N12) |
 | 128K | 17.20 t/s (spill ~2.8 GB — single card runs out) | **29.70 t/s** (PP ~185) |
 | 144K | — | **32.30 t/s** (PP 163.3) — with **Vision** (mmproj-BF16) on the 6600 |
 | 160K / 180K | — | 18.2 t/s (spill) / 20.9 t/s (re-split 1.2,3.8, light spill) |

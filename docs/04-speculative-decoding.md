@@ -62,6 +62,21 @@ n-max 24 reproduced at **29.26 / 29.30** on repeat runs. Beyond ~24 the n-gram d
 become low quality (acceptance .86 → .70) and the extra verify work is wasted.
 Note: the upstream default for this parameter is **64**; the optimum here is 24.
 
+### 64K optimum differs (2026-10-03 campaign, single 6800)
+
+At 64K the KV is half as long, so longer n-gram drafts pay off and the peak moves up:
+
+| ngram n-max (N3, ub512) | 9 | 24 | 32 | **40** | 44 | 48 |
+|---|---|---|---|---|---|---|
+| TG (warm) | 44.33 | 31.49 | 45.79 | **56.00** | 39.79 | 38.77 |
+| acceptance | .91 | .77 | .90 | **.95** | .88 | .85 |
+
+And the draft-depth curve is U-shaped around N3 (N2 42–44, N3 44–56, N4–N5 falling
+to 33–39, N6 spill-skips, N9 trough 18.3, N12 partial recovery 24.0). N and NG
+interact: N2 wins at NG24 but loses at NG40 (43.18 vs 56.00), so tune them jointly.
+ub256 beats ub512 with shallow ngrams (40.22 vs 31.49 at NG24) but loses with deep
+ones (41.04 vs 45.79 at NG32) — batch size and draft length interact too.
+
 ### MTP draft statistics (128K, N3)
 
 - warm rep: ~44 verify rounds for 128 tokens; mean draft length 2.41, accepted 1.91/round,

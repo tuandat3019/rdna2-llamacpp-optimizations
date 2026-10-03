@@ -138,5 +138,6 @@ promising for PP — 258→201 t/s observed once — but crashed in this fork; n
 | E66–E73 | 128K tuning (see §3) | N3-p50 + ngram n-max 24 = 29.3 | |
 | E75/E76 | Repeats & noise study | same config twice: 25.52 vs 23.80 (−7%) → ±5–8% run-to-run noise from GPU sharing; champion N24 reproduced 28.55 / 29.26 / 29.30 | measure twice, take max |
 | E77 | **Single 6800** | 8K **97.97** (PP 371.7, spill 280 MB); 64K **32.85** (PP 290, spill 392 MB); N32 fails (spill 2.7 GB) | single-card configs are excellent |
+| E86–E90 | **Single 6800 @64K champion** | **56.00** (N3/NG40/ub512, acc .95, PP 283.7, 6800 headroom 739 MB — no spill) vs old default N3/NG24 31.4 | **+78% from spec tuning alone** |
 | E78 | Single 6800 deep-draft probe | see `docs/06-benchmarks.md` | |
 | E65 env sweep | HSA_NO_SCRATCH_RECLAIM, NO_PEER_COPY, 2D_GATHER, FORCE_UPDATE | 106.60 / 103.56 / 105.77 / 104.87 vs 106.55 → all ties | defaults kept |
