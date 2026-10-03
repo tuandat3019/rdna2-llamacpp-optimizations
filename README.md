@@ -44,16 +44,18 @@ context.
 | # | Optimization | Source | Effect (measured) |
 |---|---|---|---|
 | 1 | **Native q4_0/q8_0 KV in the FA tile kernel (V4)** — no whole-cache F16 staging per decode step | stew675 block 15 (ported) | **+9.2% TG @128K** (dual), VRAM −472 MB (band2048: ~−950 MB total) |
-| 2 | **Speculative decoding tuning: MTP draft depth + ngram-mod + n-gram length** | this project | **+74.6% (8K)** vs MTP-only; **ngram n-max 24 = +12%** over n-max 9 @128K |
+| 2 | **Speculative decoding tuning: MTP draft depth + ngram-mod + n-gram length** | this project | **+74.6% (8K)** vs MTP-only; **ngram n-max 24 = +12%** over n-max 9 @128K; **@64K n-max 40: 31.5 → 56.0 t/s (+78%)**, plateau 40–41, collapses ≥44 |
 | 3 | **ADD + RMS_NORM + MUL fusion** | jstamagal R7 (ported) | +0.4% TG, **+7.7% PP** |
-| 4 | **Layer-split tuning (1.0,4.0) + VRAM spill analysis** | this project | 1,9 @128K collapses (PP 175→60); 1,4 is the safe split |
+| 4 | **Layer-split tuning + VRAM spill analysis** | this project | 1,9 @128K collapses (PP 175→60); 1,4 is the safe split; **@64K 2,9 wins (45.7 t/s), tighter splits spill the 6800 (peak >16 GB)** |
 | 5 | **Skip HIP graphs for multi-token prefill, keep for decode** | stew675 block 11 (ported) | neutral here @128K, kept |
 | 6 | **getenv() caching on hot paths** | stew675 r22 (ported) | neutral here (fork already cached most) |
 | 7 | **Meta-buffer compute headroom 16 → 128** | stew675 block 09 (ported) | fixes hybrid-SSM state crash |
 | 8 | **ngram-mod + MTP combination** | stew675 block 01 (ngram-mod) + this project | the single biggest TPS lever on this hardware |
 
 **Dead ends (documented so you don't repeat them):** tensor-parallel on Windows without P2P
-(barrier 380 µs → unusable), `GGML_CUDA_NO_PEER_COPY` (−75..−82% here), MMVQ nwarps sweeps
+(barrier 380 µs → unusable; re-tested 2026-10-03 at ratios 1:1/1:2, 8K+64K: TG 4.11 t/s,
+acceptance 0.000, garbage output — backend doesn't support hybrid-SSM arch at any ratio),
+`GGML_CUDA_NO_PEER_COPY` (−75..−82% here), MMVQ nwarps sweeps
 (RDNA2 prefers nwarps=1), ubatch 256/1024 at 128K (PP collapse / −29%), deep MTP drafts at
 128K (verify cost scales with KV length).
 
