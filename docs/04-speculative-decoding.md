@@ -66,10 +66,10 @@ Note: the upstream default for this parameter is **64**; the optimum here is 24.
 
 At 64K the KV is half as long, so longer n-gram drafts pay off and the peak moves up:
 
-| ngram n-max (N3, ub512) | 9 | 24 | 32 | **40** | 44 | 48 |
-|---|---|---|---|---|---|---|
-| TG (warm) | 44.33 | 31.49 | 45.79 | **56.00** | 39.79 | 38.77 |
-| acceptance | .91 | .77 | .90 | **.95** | .88 | .85 |
+| ngram n-max (N3, ub512) | 9 | 24 | 32 | **40** | 41 | 44 | 48 |
+|---|---|---|---|---|---|---|---|
+| TG (warm) | 44.33 | 31.49 | 45.79 | **56.00** | 55.59 | 39.79 | 38.77 |
+| acceptance | .91 | .77 | .90 | **.95** | .93 | .88 | .85 |
 
 And the draft-depth curve is U-shaped around N3 (N2 42–44, N3 44–56, N4–N5 falling
 to 33–39, N6 spill-skips, N9 trough 18.3, N12 partial recovery 24.0). N and NG

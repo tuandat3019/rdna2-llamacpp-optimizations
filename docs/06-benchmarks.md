@@ -15,6 +15,7 @@ Final config: band2048 (native KV everywhere), custom FA kernel OFF, ngram n-max
 | 8K | N6 | 373.0 | 95.57 | .98 | 14,907 / 280 MB | minimal |
 | 8K | N32 | — | PP-fail (115 t/s) | — | 16,331 / 2,708 MB | heavy |
 | 64K | N3 + NG40 | 283.7 | **56.00** | .95 | 15,748 / 452 MB peak | **light (~0.4 GB)** |
+| 64K | N3 + NG41 | 282.3 | 55.59 | .93 | 15,748 / 456 MB peak | identical VRAM to NG40 (diff is acceptance noise) |
 | 64K | N3 + NG32 | 283.6 | 45.79 | .90 | ~15,7xx | light |
 | 64K | N3 + NG24 (old default) | 283.6 | 31.38–31.49 | .77 | 15,748 / 392 MB | **light (~0.4 GB)** |
 | 64K | N3 + NG44 / NG48 | 283.8 / 283.7 | 39.79 / 38.77 | .88 / .85 | ~15,6–15,7xx | light (past the NG peak) |
@@ -90,6 +91,10 @@ Notes:
 Takeaway: pushing more layers onto the 6800 helps only up to 2,9 — tighter splits
 spill the 6800 (peak >16 GB) and TG collapses. Dual N optimum at 64K is N12–13;
 deeper drafts (N16+) collapse like at 128K.
+
+Tensor-parallel re-tested 2026-10-03 (ratios 1:1 and 1:2, 8K and 64K): TG 4.11 t/s,
+acceptance **0.000**, garbage output, server HTTP 500 — unusable with this hybrid
+GDN model at any ratio. Prefill is also slower than layer-split (416s vs ~190s @64K).
 
 ### Vision (mmproj-BF16, 888 MB) at 144K
 
