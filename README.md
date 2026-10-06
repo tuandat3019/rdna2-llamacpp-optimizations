@@ -39,7 +39,18 @@ context.
 
 ---
 
-## The optimizations (summary — details in `docs/`)
+## Second model line: Kurai Flash (pruned-expert Qwen3.8-Flash-Next on Strata)
+
+The same rig also runs a second, MoE-based line — **Kurai Flash**: `Swift-1.5-Qwen3.8-Flash-Next`
+with its experts **pruned 512 → 332 per layer** (IQ3_XXS, smaller model/pack), on the **Strata**
+engine. It is where the biggest single win of this whole effort lives: **`STRATA_HIP_PROMPT_F16=1`
+doubled prompt speed** (294 → 647 tok/s at an 89K prompt, ~700 tok/s with the full opt-in set),
+because rocBLAS on gfx1030 ships tuned kernels for FP16→FP16 only. Decode 31–36 tok/s warm (peak
+52.5), KV reuse ~99.9%, CoderAB60 **93/100 S** (100 reachable without the timebox).
+
+Full write-up: **[docs/10-kurai-flash-strata.md](docs/10-kurai-flash-strata.md)**
+
+## The optimizations (summary - details in `docs/`)
 
 | # | Optimization | Source | Effect (measured) |
 |---|---|---|---|
@@ -73,7 +84,8 @@ docs/05-gpu-split-and-vram.md
 docs/06-benchmarks.md         — all raw measurement tables
 docs/07-lessons-learned.md
 docs/08-references.md
-docs/09-archive-custom-fa-kernel.md  — ARCHIVE: custom FA decode kernel (kept for reference; not used)
+docs/09-archive-custom-fa-kernel.md  - ARCHIVE: custom FA decode kernel (kept for reference; not used)
+docs/10-kurai-flash-strata.md - the second model line: pruned-expert Qwen3.8-Flash-Next on the Strata engine (F16 prompt GEMMs = x2)
 ```
 
 ## Hardware used
